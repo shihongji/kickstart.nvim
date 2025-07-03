@@ -977,8 +977,17 @@ require('lazy').setup({
   -- require 'kickstart.plugins.indent_line',
   -- require 'kickstart.plugins.lint',
   -- require 'kickstart.plugins.autopairs',
-  -- require 'kickstart.plugins.neo-tree',
+  require 'kickstart.plugins.neo-tree',
   -- require 'kickstart.plugins.gitsigns', -- adds gitsigns recommend keymaps
+  {
+    'MeanderingProgrammer/render-markdown.nvim',
+    dependencies = { 'nvim-treesitter/nvim-treesitter', 'echasnovski/mini.nvim' }, -- if you use the mini.nvim suite
+    -- dependencies = { 'nvim-treesitter/nvim-treesitter', 'echasnovski/mini.icons' }, -- if you use standalone mini plugins
+    -- dependencies = { 'nvim-treesitter/nvim-treesitter', 'nvim-tree/nvim-web-devicons' }, -- if you prefer nvim-web-devicons
+    ---@module 'render-markdown'
+    ---@type render.md.UserConfig
+    opts = {},
+  },
 
   -- NOTE: The import below can automatically add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
   --    This is the easiest way to modularize your config.
@@ -1014,3 +1023,78 @@ require('lazy').setup({
 
 -- The line beneath this is called `modeline`. See `:help modeline`
 -- vim: ts=2 sts=2 sw=2 et
+--
+-- Manual shell configuration
+vim.o.shell = '/bin/zsh'
+
+-- Zettel Config
+vim.keymap.set('n', '<leader>zn', function()
+  local uid = os.date '%Y%m%d%H%M%S'
+  local path = '~/Documents/Doc/nvim/zettel/' .. uid .. '.md'
+  vim.cmd('edit ' .. path)
+  vim.api.nvim_buf_set_lines(0, 0, 0, false, {
+    '---',
+    'uid: ' .. uid,
+    'title: ',
+    'tags: ',
+    '---',
+    '',
+    '',
+  })
+  -- Position cursor on the title line
+  vim.api.nvim_win_set_cursor(0, { 3, 8 })
+end, { desc = 'New Zettel note' })
+-- Easy live grep on notes
+vim.keymap.set('n', '<leader>zg', function()
+  vim.cmd 'Telescope live_grep search_dirs=~/Documents/Doc/nvim/zettel'
+end, { desc = 'Find Zettel notes' })
+--
+-- Function to follow Zettel links by title (handles multiple links per line)
+vim.keymap.set('n', '<leader>zj', function()
+  local line = vim.api.nvim_get_current_line()
+  local cursor_col = vim.api.nvim_win_get_cursor(0)[2] + 1 -- 1-indexed
+  -- Find all links in the line and determine which one cursor is on
+  local links = {}
+  local pos = 1
+  while true do
+    local start_pos, end_pos, title = string.find(line, '%[%[([^%]]+)%]%]', pos)
+    if not start_pos then
+      break
+    end
+    table.insert(links, {
+      title = title,
+      start = start_pos,
+      end_pos = end_pos,
+    })
+    pos = end_pos + 1
+  end
+  -- Find which link the cursor is on
+  local target_link = nil
+  for _, link in ipairs(links) do
+    if cursor_col >= link.start and cursor_col <= link.end_pos then
+      target_link = link
+      break
+    end
+  end
+  if target_link then
+    local title = target_link.title
+    -- Search through zettel directory for files with matching title
+    local zettel_dir = '~/Documents/Doc/nvim/zettel'
+    local cmd = string.format('find %s -name "*.md" -exec grep -l "title: %s" {} \\;', zettel_dir, title)
+    local handle = io.popen(cmd)
+    local result = handle:read '*a'
+    handle:close()
+    if result and result ~= '' then
+      local file_path = string.match(result, '([^\n]+)')
+      if file_path then
+        vim.cmd('edit ' .. file_path)
+      else
+        print("Note with title '" .. title .. "' not found")
+      end
+    else
+      print("Note with title '" .. title .. "' not found")
+    end
+  else
+    print 'No link found at cursor position'
+  end
+end, { desc = 'Follow Zettel link by title' })
