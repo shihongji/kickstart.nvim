@@ -1036,7 +1036,7 @@ vim.o.shell = '/bin/zsh'
 -- Zettel Config
 vim.keymap.set('n', '<leader>zn', function()
     local uid = os.date '%Y%m%d%H%M%S'
-    -- Use the variable here
+    -- Create the note with a UID-based filename first
     local path = ZETTEL_DIR .. '/' .. uid .. '.md'
     vim.cmd('edit ' .. path)
     vim.api.nvim_buf_set_lines(0, 0, 0, false, {
@@ -1051,6 +1051,52 @@ vim.keymap.set('n', '<leader>zn', function()
     -- Position cursor on the title line
     vim.api.nvim_win_set_cursor(0, { 3, 8 })
 end, { desc = 'New Zettel note' })
+
+----------------------------------------------------------------------------------------------------
+
+-- New function to rename the file based on the note's title
+vim.keymap.set('n', '<leader>zt', function()
+    -- Get the title from the metadata
+    local title_line = vim.api.nvim_buf_get_lines(0, 2, 3, false)[1]
+    local _, _, title = string.find(title_line, 'title: (.+)')
+
+    if not title or title:match('^%s*$') then
+        print('Error: Title not found or is empty.')
+        return
+    end
+
+    -- Sanitize the title for use as a filename
+    local sanitized_title = title:gsub('[/\\?%*:"<>|]', ''):gsub('%s+', '_')
+
+    -- Check for conflicts and append a UID if needed
+    local current_filename = vim.fn.expand('%:t')
+    local new_filename = sanitized_title .. '.md'
+
+    if current_filename ~= new_filename then
+        local new_path = ZETTEL_DIR .. '/' .. new_filename
+        local uid_on_disk = string.match(current_filename, '^(%d+).md$')
+
+        -- Check for a file with the same sanitized title
+        if vim.fn.filereadable(new_path) == 1 then
+            -- Conflict detected, append the UID to the new filename
+            if uid_on_disk then
+                new_filename = sanitized_title .. '_' .. uid_on_disk .. '.md'
+                new_path = ZETTEL_DIR .. '/' .. new_filename
+            else
+                -- Fallback for non-UID files, though not expected in this setup
+                print("Note with a similar title already exists and cannot be renamed automatically.")
+                return
+            end
+        end
+
+        -- Rename the buffer and the file on disk
+        vim.cmd('silent! file ' .. new_filename)
+        os.rename(vim.fn.expand('%:p'), new_path)
+        print('Note saved as ' .. new_filename)
+    else
+        print('Note is already correctly named.')
+    end
+end, { desc = 'Save/Rename note by title' })
 
 ----------------------------------------------------------------------------------------------------
 
@@ -1092,7 +1138,6 @@ vim.keymap.set('n', '<leader>zj', function()
     if target_link then
         local title = target_link.title
         -- Search through zettel directory for files with matching title
-        -- Use the variable here
         local cmd = string.format('find %s -name "*.md" -exec grep -l "title: %s" {} \\;', ZETTEL_DIR, title)
         local handle = io.popen(cmd)
         local result = handle:read '*a'
