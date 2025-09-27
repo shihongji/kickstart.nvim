@@ -1027,13 +1027,17 @@ require('lazy').setup({
 -- The line beneath this is called `modeline`. See `:help modeline`
 -- vim: ts=2 sts=2 sw=2 et
 --
+-- Define a variable for the Zettel directory path
+local ZETTEL_DIR = '~/Documents/Doc/nvim/zettel'
+
 -- Manual shell configuration
 vim.o.shell = '/bin/zsh'
 
 -- Zettel Config
 vim.keymap.set('n', '<leader>zn', function()
     local uid = os.date '%Y%m%d%H%M%S'
-    local path = '~/Documents/Doc/nvim/zettel/' .. uid .. '.md'
+    -- Use the variable here
+    local path = ZETTEL_DIR .. '/' .. uid .. '.md'
     vim.cmd('edit ' .. path)
     vim.api.nvim_buf_set_lines(0, 0, 0, false, {
         '---',
@@ -1047,11 +1051,17 @@ vim.keymap.set('n', '<leader>zn', function()
     -- Position cursor on the title line
     vim.api.nvim_win_set_cursor(0, { 3, 8 })
 end, { desc = 'New Zettel note' })
+
+----------------------------------------------------------------------------------------------------
+
 -- Easy live grep on notes
 vim.keymap.set('n', '<leader>zg', function()
-    vim.cmd 'Telescope live_grep search_dirs=~/Documents/Doc/nvim/zettel'
+    -- Use the variable here
+    vim.cmd('Telescope live_grep search_dirs=' .. ZETTEL_DIR)
 end, { desc = 'Find Zettel notes' })
---
+
+----------------------------------------------------------------------------------------------------
+
 -- Function to follow Zettel links by title (handles multiple links per line)
 vim.keymap.set('n', '<leader>zj', function()
     local line = vim.api.nvim_get_current_line()
@@ -1082,8 +1092,8 @@ vim.keymap.set('n', '<leader>zj', function()
     if target_link then
         local title = target_link.title
         -- Search through zettel directory for files with matching title
-        local zettel_dir = '~/Documents/Doc/nvim/zettel'
-        local cmd = string.format('find %s -name "*.md" -exec grep -l "title: %s" {} \\;', zettel_dir, title)
+        -- Use the variable here
+        local cmd = string.format('find %s -name "*.md" -exec grep -l "title: %s" {} \\;', ZETTEL_DIR, title)
         local handle = io.popen(cmd)
         local result = handle:read '*a'
         handle:close()
