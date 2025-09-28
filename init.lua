@@ -945,7 +945,7 @@ require('lazy').setup({
         main = 'nvim-treesitter.configs', -- Sets main module to use for opts
         -- [[ Configure Treesitter ]] See `:help nvim-treesitter`
         opts = {
-            ensure_installed = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' },
+            ensure_installed = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'yaml', 'query', 'vim', 'vimdoc' },
             -- Autoinstall languages that are not installed
             auto_install = true,
             highlight = {
@@ -1028,7 +1028,7 @@ require('lazy').setup({
 -- vim: ts=2 sts=2 sw=2 et
 --
 -- Define a variable for the Zettel directory path
-local ZETTEL_DIR = '~/Documents/Doc/nvim/zettel'
+local ZETTEL_DIR = '/Users/hongji/Documents/Doc/nvim/zettel'
 
 -- Manual shell configuration
 vim.o.shell = '/bin/zsh'
@@ -1053,8 +1053,6 @@ vim.keymap.set('n', '<leader>zn', function()
 end, { desc = 'New Zettel note' })
 
 ----------------------------------------------------------------------------------------------------
-
--- New function to rename the file based on the note's title
 vim.keymap.set('n', '<leader>zt', function()
     -- Get the title from the metadata
     local title_line = vim.api.nvim_buf_get_lines(0, 2, 3, false)[1]
@@ -1065,37 +1063,48 @@ vim.keymap.set('n', '<leader>zt', function()
         return
     end
 
+    -- Get current file path and name
+    local old_path = vim.fn.expand('%:p')
+
     -- Sanitize the title for use as a filename
     local sanitized_title = title:gsub('[/\\?%*:"<>|]', ''):gsub('%s+', '_')
 
-    -- Check for conflicts and append a UID if needed
-    local current_filename = vim.fn.expand('%:t')
+    -- Resolve the new path to an absolute path immediately
     local new_filename = sanitized_title .. '.md'
+    local new_path = vim.fn.fnamemodify(ZETTEL_DIR .. '/' .. new_filename, ':p')
 
-    if current_filename ~= new_filename then
-        local new_path = ZETTEL_DIR .. '/' .. new_filename
-        local uid_on_disk = string.match(current_filename, '^(%d+).md$')
+    -- Ensure the file is saved to the old path before renaming
+    vim.cmd('write')
 
-        -- Check for a file with the same sanitized title
-        if vim.fn.filereadable(new_path) == 1 then
-            -- Conflict detected, append the UID to the new filename
-            if uid_on_disk then
-                new_filename = sanitized_title .. '_' .. uid_on_disk .. '.md'
-                new_path = ZETTEL_DIR .. '/' .. new_filename
-            else
-                -- Fallback for non-UID files, though not expected in this setup
-                print("Note with a similar title already exists and cannot be renamed automatically.")
-                return
-            end
+    -- Check for conflicts and adjust the filename if needed
+    if vim.fn.filereadable(new_path) == 1 then
+        local uid_on_disk = string.match(vim.fn.expand('%:t'), '^(%d+).md$')
+        if uid_on_disk then
+            new_filename = sanitized_title .. '_' .. uid_on_disk .. '.md'
+            new_path = vim.fn.fnamemodify(ZETTEL_DIR .. '/' .. new_filename, ':p')
+        else
+            print("Note with a similar title already exists and cannot be renamed automatically.")
+            return
         end
-
-        -- Rename the buffer and the file on disk
-        vim.cmd('silent! file ' .. new_filename)
-        os.rename(vim.fn.expand('%:p'), new_path)
-        print('Note saved as ' .. new_filename)
-    else
-        print('Note is already correctly named.')
     end
+
+    -- If the filename is already correct, do nothing
+    if vim.fn.expand('%:t') == new_filename then
+        print('Note is already correctly named.')
+        return
+    end
+
+    -- Use vim.fn.rename() for a more robust cross-platform approach
+    local success = vim.fn.rename(old_path, new_path)
+    if success ~= 0 then
+        print('Error: Failed to rename the file.')
+        return
+    end
+
+    -- THIS IS THE FIX: Explicitly set the buffer's new filename
+    vim.cmd('file ' .. new_filename)
+
+    print('Note saved as ' .. new_filename)
 end, { desc = 'Save/Rename note by title' })
 
 ----------------------------------------------------------------------------------------------------
