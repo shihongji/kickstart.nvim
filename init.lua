@@ -945,7 +945,7 @@ require('lazy').setup({
         main = 'nvim-treesitter.configs', -- Sets main module to use for opts
         -- [[ Configure Treesitter ]] See `:help nvim-treesitter`
         opts = {
-            ensure_installed = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' },
+            ensure_installed = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'yaml', 'query', 'vim', 'vimdoc' },
             -- Autoinstall languages that are not installed
             auto_install = true,
             highlight = {
@@ -1027,13 +1027,17 @@ require('lazy').setup({
 -- The line beneath this is called `modeline`. See `:help modeline`
 -- vim: ts=2 sts=2 sw=2 et
 --
+-- Define a variable for the Zettel directory path
+local ZETTEL_DIR = '/Users/hongji/Documents/Doc/nvim/zettel'
+
 -- Manual shell configuration
 vim.o.shell = '/bin/zsh'
 
 -- Zettel Config
 vim.keymap.set('n', '<leader>zn', function()
     local uid = os.date '%Y%m%d%H%M%S'
-    local path = '~/Documents/Doc/nvim/zettel/' .. uid .. '.md'
+    -- Create the note with a UID-based filename first
+    local path = ZETTEL_DIR .. '/' .. uid .. '.md'
     vim.cmd('edit ' .. path)
     vim.api.nvim_buf_set_lines(0, 0, 0, false, {
         '---',
@@ -1047,11 +1051,72 @@ vim.keymap.set('n', '<leader>zn', function()
     -- Position cursor on the title line
     vim.api.nvim_win_set_cursor(0, { 3, 8 })
 end, { desc = 'New Zettel note' })
+
+----------------------------------------------------------------------------------------------------
+vim.keymap.set('n', '<leader>zt', function()
+    -- Get the title from the metadata
+    local title_line = vim.api.nvim_buf_get_lines(0, 2, 3, false)[1]
+    local _, _, title = string.find(title_line, 'title: (.+)')
+
+    if not title or title:match('^%s*$') then
+        print('Error: Title not found or is empty.')
+        return
+    end
+
+    -- Get current file path and name
+    local old_path = vim.fn.expand('%:p')
+
+    -- Sanitize the title for use as a filename
+    local sanitized_title = title:gsub('[/\\?%*:"<>|]', ''):gsub('%s+', '_')
+
+    -- Resolve the new path to an absolute path immediately
+    local new_filename = sanitized_title .. '.md'
+    local new_path = vim.fn.fnamemodify(ZETTEL_DIR .. '/' .. new_filename, ':p')
+
+    -- Ensure the file is saved to the old path before renaming
+    vim.cmd('write')
+
+    -- Check for conflicts and adjust the filename if needed
+    if vim.fn.filereadable(new_path) == 1 then
+        local uid_on_disk = string.match(vim.fn.expand('%:t'), '^(%d+).md$')
+        if uid_on_disk then
+            new_filename = sanitized_title .. '_' .. uid_on_disk .. '.md'
+            new_path = vim.fn.fnamemodify(ZETTEL_DIR .. '/' .. new_filename, ':p')
+        else
+            print("Note with a similar title already exists and cannot be renamed automatically.")
+            return
+        end
+    end
+
+    -- If the filename is already correct, do nothing
+    if vim.fn.expand('%:t') == new_filename then
+        print('Note is already correctly named.')
+        return
+    end
+
+    -- Use vim.fn.rename() for a more robust cross-platform approach
+    local success = vim.fn.rename(old_path, new_path)
+    if success ~= 0 then
+        print('Error: Failed to rename the file.')
+        return
+    end
+
+    -- THIS IS THE FIX: Explicitly set the buffer's new filename
+    vim.cmd('file ' .. new_filename)
+
+    print('Note saved as ' .. new_filename)
+end, { desc = 'Save/Rename note by title' })
+
+----------------------------------------------------------------------------------------------------
+
 -- Easy live grep on notes
 vim.keymap.set('n', '<leader>zg', function()
-    vim.cmd 'Telescope live_grep search_dirs=~/Documents/Doc/nvim/zettel'
+    -- Use the variable here
+    vim.cmd('Telescope live_grep search_dirs=' .. ZETTEL_DIR)
 end, { desc = 'Find Zettel notes' })
---
+
+----------------------------------------------------------------------------------------------------
+
 -- Function to follow Zettel links by title (handles multiple links per line)
 vim.keymap.set('n', '<leader>zj', function()
     local line = vim.api.nvim_get_current_line()
@@ -1082,8 +1147,7 @@ vim.keymap.set('n', '<leader>zj', function()
     if target_link then
         local title = target_link.title
         -- Search through zettel directory for files with matching title
-        local zettel_dir = '~/Documents/Doc/nvim/zettel'
-        local cmd = string.format('find %s -name "*.md" -exec grep -l "title: %s" {} \\;', zettel_dir, title)
+        local cmd = string.format('find %s -name "*.md" -exec grep -l "title: %s" {} \\;', ZETTEL_DIR, title)
         local handle = io.popen(cmd)
         local result = handle:read '*a'
         handle:close()
